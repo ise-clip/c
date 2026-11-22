@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ku" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>QuickClip ⚡</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body {
+      background: #0b1120; color: #f8fafc; padding: 14px;
+      max-width: 750px; margin: 0 auto;
+      height: 100vh; height: 100dvh;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    button {
+      border: none; border-radius: 14px; padding: 16px;
+      font-size: 1.1rem; font-weight: bold; color: #fff;
+      cursor: pointer; touch-action: manipulation;
+      transition: transform 0.1s;
+    }
+    button:active { transform: scale(0.97); }
+    #pasteBtn { background: #0284c7; }
+    #copyBtn { background: #10b981; }
+    #deleteBtn {
+      background: #dc2626; width: 100%; padding: 14px; font-size: 1rem;
+    }
+    .status {
+      text-align: center; font-size: 0.9rem; min-height: 20px; color: #38bdf8;
+    }
+    #codeBox {
+      flex: 1; width: 100%; background: #1e293b; color: #e2e8f0;
+      border: 1px solid #334155; border-radius: 14px; padding: 14px;
+      font-family: ui-monospace, Consolas, monospace; font-size: 0.95rem;
+      line-height: 1.6; resize: none; outline: none;
+    }
+    #codeBox:focus { border-color: #38bdf8; }
+  </style>
+</head>
+<body>
+
+  <div class="buttons">
+    <button id="pasteBtn">پەیست 📥</button>
+    <button id="copyBtn">کۆپی 📋</button>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <textarea id="codeBox" dir="auto" placeholder="کۆدەکە لێرە دەردەکەوێت..."></textarea>
+
+  <button id="deleteBtn">سڕینەوە 🗑️</button>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyA335HRWD4uJBgRqYZ3eyYGyzALhpPiVDM",
+      authDomain: "quickclip-5ad69.firebaseapp.com",
+      databaseURL: "https://quickclip-5ad69-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "quickclip-5ad69",
+      storageBucket: "quickclip-5ad69.firebasestorage.app",
+      messagingSenderId: "929214731654",
+      appId: "1:929214731654:web:3086c3495003471cb68807",
+      measurementId: "G-EQZ5V1TEPQ"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const clipRef = ref(db, "currentClip");
+
+    const codeBox = document.getElementById("codeBox");
+    const statusEl = document.getElementById("status");
+
+    function showStatus(msg, color = "#38bdf8") {
+      statusEl.style.color = color;
+      statusEl.textContent = msg;
+      setTimeout(() => { if (statusEl.textContent === msg) statusEl.textContent = ""; }, 1800);
+    }
+
+    onValue(clipRef, (snapshot) => {
+      const val = snapshot.val() || "";
+      if (codeBox.value !== val) {
+        codeBox.value = val;
+      }
+    });
+
+    document.getElementById("pasteBtn").addEventListener("click", async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (!text) return showStatus("کلیپبۆرد بەتاڵە!", "#f87171");
+        codeBox.value = text;
+        await set(clipRef, text);
+        showStatus("پەیست و جێگیر کرا ⚡", "#38bdf8");
+      } catch {
+        showStatus("بڕاوسەر ڕێگەی نەدا، ڕاستەوخۆ لەناو چوارچێوەکە پەیستی بکە", "#fbbf24");
+        codeBox.focus();
+      }
+    });
+
+    codeBox.addEventListener("input", () => {
+      set(clipRef, codeBox.value);
+    });
+
+    document.getElementById("copyBtn").addEventListener("click", async () => {
+      if (!codeBox.value) return showStatus("هیچ کۆدێک نییە!", "#f87171");
+      try {
+        await navigator.clipboard.writeText(codeBox.value);
+        showStatus("کۆپی کرا ✓", "#34d399");
+      } catch {
+        codeBox.select();
+        document.execCommand("copy");
+        showStatus("کۆپی کرا ✓", "#34d399");
+      }
+    });
+
+    document.getElementById("deleteBtn").addEventListener("click", async () => {
+      if (!codeBox.value) return;
+      codeBox.value = "";
+      await set(clipRef, "");
+      showStatus("سڕایەوە 🗑️", "#f87171");
+    });
+  </script>
+</body>
+</html>
