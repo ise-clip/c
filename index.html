@@ -91,7 +91,7 @@
         if (!text) return showStatus("Null !", "#f87171");
         codeBox.value = text;
         await set(clipRef, text);
-        showStatus("Pasted", "#38bdf8");
+        showStatus("✓ Paste", "#38bdf8");
       } catch {
         showStatus("بڕاوسەر ڕێگەی نەدا، ڕاستەوخۆ لەناو چوارچێوەکە پەیستی بکە", "#fbbf24");
         codeBox.focus();
@@ -106,11 +106,11 @@
       if (!codeBox.value) return showStatus("Null !", "#f87171");
       try {
         await navigator.clipboard.writeText(codeBox.value);
-        showStatus("✓ Copyed", "#34d399");
+        showStatus("✓ Copy", "#34d399");
       } catch {
         codeBox.select();
         document.execCommand("copy");
-        showStatus("✓ Copyed", "#34d399");
+        showStatus("✓ Copy", "#34d399");
       }
     });
 
@@ -118,7 +118,7 @@
       if (!codeBox.value) return;
       codeBox.value = "";
       await set(clipRef, "");
-      showStatus("Deleted", "#f87171");
+      showStatus("✓ Delete", "#f87171");
     });
   </script>
 </body>
