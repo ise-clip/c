@@ -88,7 +88,7 @@
     document.getElementById("pasteBtn").addEventListener("click", async () => {
       try {
         const text = await navigator.clipboard.readText();
-        if (!text) return showStatus("Null!", "#f87171");
+        if (!text) return showStatus("Null !", "#f87171");
         codeBox.value = text;
         await set(clipRef, text);
         showStatus("Pasted", "#38bdf8");
@@ -103,7 +103,7 @@
     });
 
     document.getElementById("copyBtn").addEventListener("click", async () => {
-      if (!codeBox.value) return showStatus("هیچ کۆدێک نییە!", "#f87171");
+      if (!codeBox.value) return showStatus("Null !", "#f87171");
       try {
         await navigator.clipboard.writeText(codeBox.value);
         showStatus("✓ Copyed", "#34d399");
