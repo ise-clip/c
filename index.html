@@ -33,27 +33,25 @@
     #backBtn {
       background: #334155; width: 100%; padding: 14px; font-size: 1rem;
     }
-    #addFileBtn {
-      background: #10b981; width: 100%; padding: 13px; font-size: 1rem;
+    #pasteSaveBtn {
+      background: #0284c7; width: 100%; padding: 14px; font-size: 1rem;
     }
 
     .status {
       text-align: center; font-size: 0.9rem; min-height: 20px; color: #38bdf8;
     }
-    #codeBox, #fileCodeInput {
-      width: 100%; background: #1e293b; color: #e2e8f0;
+    #codeBox {
+      flex: 1; width: 100%; background: #1e293b; color: #e2e8f0;
       border: 1px solid #334155; border-radius: 14px; padding: 14px;
       font-family: ui-monospace, Consolas, monospace; font-size: 0.95rem;
       line-height: 1.6; resize: none; outline: none;
     }
-    #codeBox { flex: 1; }
-    #fileCodeInput { height: 140px; }
     #fileNameInput {
       width: 100%; background: #1e293b; color: #e2e8f0;
-      border: 1px solid #334155; border-radius: 14px; padding: 12px 14px;
+      border: 1px solid #334155; border-radius: 14px; padding: 14px;
       font-size: 0.95rem; outline: none;
     }
-    #codeBox:focus, #fileCodeInput:focus, #fileNameInput:focus { border-color: #38bdf8; }
+    #codeBox:focus, #fileNameInput:focus { border-color: #38bdf8; }
 
     #filesList {
       flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
@@ -107,14 +105,13 @@
   <!-- Saved Files (Notepad) View -->
   <div id="filesView" class="view hidden">
     <input type="text" id="fileNameInput" placeholder="File name (auto: code1, code2...)">
-    <textarea id="fileCodeInput" dir="auto" placeholder="Write or paste code to save..."></textarea>
-    <button id="addFileBtn">Save Code</button>
+    <button id="pasteSaveBtn">Paste &amp; Save</button>
 
     <div class="status" id="fileStatus"></div>
 
     <div id="filesList"></div>
 
-    <button id="backBtn">← Back</button>
+    <button id="backBtn">Back</button>
   </div>
 
   <script type="module">
@@ -143,7 +140,6 @@
     const statusEl = document.getElementById("status");
     const fileStatusEl = document.getElementById("fileStatus");
     const fileNameInput = document.getElementById("fileNameInput");
-    const fileCodeInput = document.getElementById("fileCodeInput");
     const filesList = document.getElementById("filesList");
 
     let savedFiles = {};
@@ -209,7 +205,7 @@
       mainView.classList.remove("hidden");
     });
 
-    // --- Saved Files (Notepad) ---
+    // --- Saved Files (Paste & Save) ---
     function getNextAutoName() {
       let maxNum = 0;
       Object.values(savedFiles).forEach((item) => {
@@ -222,16 +218,19 @@
       return "code" + (maxNum + 1);
     }
 
-    document.getElementById("addFileBtn").addEventListener("click", async () => {
-      const code = fileCodeInput.value.trim();
-      if (!code) return showStatus(fileStatusEl, "Null !", "#f87171");
+    document.getElementById("pasteSaveBtn").addEventListener("click", async () => {
+      try {
+        const code = (await navigator.clipboard.readText()).trim();
+        if (!code) return showStatus(fileStatusEl, "Null !", "#f87171");
 
-      const name = fileNameInput.value.trim() || getNextAutoName();
-      await push(filesRef, { name, code, createdAt: Date.now() });
+        const name = fileNameInput.value.trim() || getNextAutoName();
+        await push(filesRef, { name, code, createdAt: Date.now() });
 
-      fileNameInput.value = "";
-      fileCodeInput.value = "";
-      showStatus(fileStatusEl, `✓ Saved (${name})`, "#34d399");
+        fileNameInput.value = "";
+        showStatus(fileStatusEl, `✓ Saved (${name})`, "#34d399");
+      } catch {
+        showStatus(fileStatusEl, "Allow clipboard permission!", "#fbbf24");
+      }
     });
 
     function escapeHtml(str) {
