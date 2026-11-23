@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ku" dir="rtl">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -10,8 +10,14 @@
       background: #0b1120; color: #f8fafc; padding: 14px;
       max-width: 750px; margin: 0 auto;
       height: 100vh; height: 100dvh;
-      display: flex; flex-direction: column; gap: 10px;
+      display: flex; flex-direction: column;
     }
+    .view {
+      display: flex; flex-direction: column; gap: 10px;
+      height: 100%; width: 100%;
+    }
+    .hidden { display: none !important; }
+
     .buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     button {
       border: none; border-radius: 14px; padding: 16px;
@@ -20,39 +26,100 @@
       transition: transform 0.1s;
     }
     button:active { transform: scale(0.97); }
-    #pasteBtn { background: #0284c7; }
+    #openSaveBtn { background: #6366f1; }
     #copyBtn { background: #10b981; }
-    #deleteBtn {
-      background: #dc2626; width: 100%; padding: 14px; font-size: 1rem;
+    #deleteBtn { background: #dc2626; padding: 14px; font-size: 1rem; }
+    #pasteBtn { background: #0284c7; padding: 14px; font-size: 1rem; }
+    #backBtn {
+      background: #334155; width: 100%; padding: 14px; font-size: 1rem;
     }
+    #addFileBtn {
+      background: #10b981; width: 100%; padding: 13px; font-size: 1rem;
+    }
+
     .status {
       text-align: center; font-size: 0.9rem; min-height: 20px; color: #38bdf8;
     }
-    #codeBox {
-      flex: 1; width: 100%; background: #1e293b; color: #e2e8f0;
+    #codeBox, #fileCodeInput {
+      width: 100%; background: #1e293b; color: #e2e8f0;
       border: 1px solid #334155; border-radius: 14px; padding: 14px;
       font-family: ui-monospace, Consolas, monospace; font-size: 0.95rem;
       line-height: 1.6; resize: none; outline: none;
     }
-    #codeBox:focus { border-color: #38bdf8; }
+    #codeBox { flex: 1; }
+    #fileCodeInput { height: 140px; }
+    #fileNameInput {
+      width: 100%; background: #1e293b; color: #e2e8f0;
+      border: 1px solid #334155; border-radius: 14px; padding: 12px 14px;
+      font-size: 0.95rem; outline: none;
+    }
+    #codeBox:focus, #fileCodeInput:focus, #fileNameInput:focus { border-color: #38bdf8; }
+
+    #filesList {
+      flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
+      padding-bottom: 10px;
+    }
+    .file-card {
+      background: #1e293b; border: 1px solid #334155; border-radius: 14px;
+      padding: 12px; display: flex; flex-direction: column; gap: 8px;
+    }
+    .file-header {
+      display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    }
+    .file-title {
+      font-weight: bold; color: #38bdf8; font-size: 1rem; word-break: break-all;
+    }
+    .file-actions { display: flex; gap: 6px; }
+    .file-actions button {
+      padding: 7px 12px; font-size: 0.85rem; border-radius: 10px;
+    }
+    .btn-mini-copy { background: #10b981; }
+    .btn-mini-del { background: #dc2626; }
+    .file-content {
+      background: #0b1120; color: #cbd5e1; padding: 10px; border-radius: 10px;
+      font-family: ui-monospace, Consolas, monospace; font-size: 0.85rem;
+      white-space: pre-wrap; word-break: break-all; max-height: 160px; overflow-y: auto;
+    }
+    .empty-msg {
+      text-align: center; color: #64748b; margin-top: 20px; font-size: 0.95rem;
+    }
   </style>
 </head>
 <body>
 
-  <div class="buttons">
-    <button id="pasteBtn">Paest</button>
-    <button id="copyBtn">Copy</button>
+  <!-- Main Clipboard View -->
+  <div id="mainView" class="view">
+    <div class="buttons">
+      <button id="openSaveBtn">Save</button>
+      <button id="copyBtn">Copy</button>
+    </div>
+
+    <div class="status" id="status"></div>
+
+    <textarea id="codeBox" dir="auto" placeholder="Codes....."></textarea>
+
+    <div class="buttons">
+      <button id="deleteBtn">Delete</button>
+      <button id="pasteBtn">Paste</button>
+    </div>
   </div>
 
-  <div class="status" id="status"></div>
+  <!-- Saved Files (Notepad) View -->
+  <div id="filesView" class="view hidden">
+    <input type="text" id="fileNameInput" placeholder="File name (auto: code1, code2...)">
+    <textarea id="fileCodeInput" dir="auto" placeholder="Write or paste code to save..."></textarea>
+    <button id="addFileBtn">Save Code</button>
 
-  <textarea id="codeBox" dir="auto" placeholder="Codes....."></textarea>
+    <div class="status" id="fileStatus"></div>
 
-  <button id="deleteBtn">Delete</button>
+    <div id="filesList"></div>
+
+    <button id="backBtn">← Back</button>
+  </div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+    import { getDatabase, ref, set, push, remove, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyA335HRWD4uJBgRqYZ3eyYGyzALhpPiVDM",
@@ -68,16 +135,26 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
     const clipRef = ref(db, "currentClip");
+    const filesRef = ref(db, "savedCodes");
 
+    const mainView = document.getElementById("mainView");
+    const filesView = document.getElementById("filesView");
     const codeBox = document.getElementById("codeBox");
     const statusEl = document.getElementById("status");
+    const fileStatusEl = document.getElementById("fileStatus");
+    const fileNameInput = document.getElementById("fileNameInput");
+    const fileCodeInput = document.getElementById("fileCodeInput");
+    const filesList = document.getElementById("filesList");
 
-    function showStatus(msg, color = "#38bdf8") {
-      statusEl.style.color = color;
-      statusEl.textContent = msg;
-      setTimeout(() => { if (statusEl.textContent === msg) statusEl.textContent = ""; }, 1800);
+    let savedFiles = {};
+
+    function showStatus(el, msg, color = "#38bdf8") {
+      el.style.color = color;
+      el.textContent = msg;
+      setTimeout(() => { if (el.textContent === msg) el.textContent = ""; }, 1800);
     }
 
+    // --- Main Clipboard ---
     onValue(clipRef, (snapshot) => {
       const val = snapshot.val() || "";
       if (codeBox.value !== val) {
@@ -88,12 +165,12 @@
     document.getElementById("pasteBtn").addEventListener("click", async () => {
       try {
         const text = await navigator.clipboard.readText();
-        if (!text) return showStatus("Null !", "#f87171");
+        if (!text) return showStatus(statusEl, "Null !", "#f87171");
         codeBox.value = text;
         await set(clipRef, text);
-        showStatus("✓ Paste", "#38bdf8");
+        showStatus(statusEl, "✓ Paste", "#38bdf8");
       } catch {
-        showStatus("بڕاوسەر ڕێگەی نەدا، ڕاستەوخۆ لەناو چوارچێوەکە پەیستی بکە", "#fbbf24");
+        showStatus(statusEl, "Paste manually (Ctrl+V)", "#fbbf24");
         codeBox.focus();
       }
     });
@@ -103,14 +180,14 @@
     });
 
     document.getElementById("copyBtn").addEventListener("click", async () => {
-      if (!codeBox.value) return showStatus("Null !", "#f87171");
+      if (!codeBox.value) return showStatus(statusEl, "Null !", "#f87171");
       try {
         await navigator.clipboard.writeText(codeBox.value);
-        showStatus("✓ Copy", "#34d399");
+        showStatus(statusEl, "✓ Copy", "#34d399");
       } catch {
         codeBox.select();
         document.execCommand("copy");
-        showStatus("✓ Copy", "#34d399");
+        showStatus(statusEl, "✓ Copy", "#34d399");
       }
     });
 
@@ -118,7 +195,89 @@
       if (!codeBox.value) return;
       codeBox.value = "";
       await set(clipRef, "");
-      showStatus("✓ Delete", "#f87171");
+      showStatus(statusEl, "✓ Delete", "#f87171");
+    });
+
+    // --- Switch Views ---
+    document.getElementById("openSaveBtn").addEventListener("click", () => {
+      mainView.classList.add("hidden");
+      filesView.classList.remove("hidden");
+    });
+
+    document.getElementById("backBtn").addEventListener("click", () => {
+      filesView.classList.add("hidden");
+      mainView.classList.remove("hidden");
+    });
+
+    // --- Saved Files (Notepad) ---
+    function getNextAutoName() {
+      let maxNum = 0;
+      Object.values(savedFiles).forEach((item) => {
+        const match = /^code(\d+)$/i.exec((item.name || "").trim());
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNum) maxNum = num;
+        }
+      });
+      return "code" + (maxNum + 1);
+    }
+
+    document.getElementById("addFileBtn").addEventListener("click", async () => {
+      const code = fileCodeInput.value.trim();
+      if (!code) return showStatus(fileStatusEl, "Null !", "#f87171");
+
+      const name = fileNameInput.value.trim() || getNextAutoName();
+      await push(filesRef, { name, code, createdAt: Date.now() });
+
+      fileNameInput.value = "";
+      fileCodeInput.value = "";
+      showStatus(fileStatusEl, `✓ Saved (${name})`, "#34d399");
+    });
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    onValue(filesRef, (snapshot) => {
+      savedFiles = snapshot.val() || {};
+      filesList.innerHTML = "";
+
+      const entries = Object.entries(savedFiles).reverse();
+      if (entries.length === 0) {
+        filesList.innerHTML = '<div class="empty-msg">No saved codes yet.</div>';
+        return;
+      }
+
+      entries.forEach(([id, item]) => {
+        const card = document.createElement("div");
+        card.className = "file-card";
+        card.innerHTML = `
+          <div class="file-header">
+            <span class="file-title">${escapeHtml(item.name || "code")}</span>
+            <div class="file-actions">
+              <button class="btn-mini-copy">Copy</button>
+              <button class="btn-mini-del">Delete</button>
+            </div>
+          </div>
+          <div class="file-content">${escapeHtml(item.code || "")}</div>
+        `;
+
+        card.querySelector(".btn-mini-copy").addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(item.code || "");
+            showStatus(fileStatusEl, `✓ Copy (${item.name})`, "#34d399");
+          } catch {
+            showStatus(fileStatusEl, "Copy failed", "#f87171");
+          }
+        });
+
+        card.querySelector(".btn-mini-del").addEventListener("click", async () => {
+          await remove(ref(db, `savedCodes/${id}`));
+          showStatus(fileStatusEl, `✓ Delete (${item.name})`, "#f87171");
+        });
+
+        filesList.appendChild(card);
+      });
     });
   </script>
 </body>
