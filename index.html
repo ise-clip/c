@@ -1,4 +1,4 @@
-    <!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -26,7 +26,7 @@
       cursor: pointer; touch-action: manipulation;
       transition: transform 0.1s;
     }
-    button:active { transform: scale(0.97); }
+    button:active { transform: scale(0.96); }
     #openSaveBtn { background: #6366f1; }
     #copyBtn { background: #10b981; }
     #cameraBtn { background: #f59e0b; width: 100%; padding: 13px; font-size: 1.05rem; }
@@ -35,6 +35,7 @@
     #backBtn { background: #334155; width: 100%; padding: 14px; font-size: 1rem; }
     #pasteSaveBtn { background: #0284c7; width: 100%; padding: 14px; font-size: 1rem; }
 
+    /* Small Image Preview with Spinner */
     .preview-box {
       position: relative;
       width: 76px; height: 76px;
@@ -66,6 +67,50 @@
     }
     @keyframes spin {
       to { transform: rotate(360deg); }
+    }
+
+    /* Fullscreen Custom Camera Modal (Lens Style) */
+    #cameraModal {
+      position: fixed; inset: 0; z-index: 9999;
+      background: #000;
+      display: flex; flex-direction: column;
+    }
+    #cameraVideo {
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+    .cam-top {
+      position: absolute; top: 0; left: 0; right: 0;
+      padding: 18px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.65), transparent);
+    }
+    #closeCamBtn {
+      background: rgba(0,0,0,0.45);
+      width: 44px; height: 44px; padding: 0;
+      border-radius: 50%; font-size: 1.4rem;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .cam-bottom {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      padding: 28px 24px 36px;
+      display: flex; align-items: center; justify-content: center; gap: 28px;
+      background: linear-gradient(to top, rgba(0,0,0,0.75), transparent);
+    }
+    #galleryCamBtn {
+      width: 56px; height: 56px; padding: 0;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.15);
+      border: 2px solid rgba(255, 255, 255, 0.85);
+      display: flex; align-items: center; justify-content: center;
+      position: absolute; left: 28px;
+    }
+    #shutterBtn {
+      width: 74px; height: 74px; padding: 0;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 5px solid rgba(255, 255, 255, 0.4);
+      box-shadow: 0 0 0 3px rgba(0,0,0,0.3);
     }
 
     .status {
@@ -127,7 +172,7 @@
     </div>
 
     <button id="cameraBtn">📷 Camera</button>
-    <input type="file" id="cameraInput" accept="image/*" capture="environment" class="hidden">
+    <input type="file" id="galleryInput" accept="image/*" class="hidden">
 
     <!-- Small Image Preview with Spinner Overlay -->
     <div id="previewBox" class="preview-box hidden">
@@ -160,6 +205,26 @@
     <button id="backBtn">← Back</button>
   </div>
 
+  <!-- Fullscreen Camera Modal with Gallery Button inside -->
+  <div id="cameraModal" class="hidden">
+    <video id="cameraVideo" autoplay playsinline></video>
+
+    <div class="cam-top">
+      <button id="closeCamBtn">←</button>
+    </div>
+
+    <div class="cam-bottom">
+      <button id="galleryCamBtn" title="Gallery">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+          <circle cx="8.5" cy="8.5" r="1.5"></circle>
+          <polyline points="21 15 16 10 5 21"></polyline>
+        </svg>
+      </button>
+      <button id="shutterBtn" title="Take Photo"></button>
+    </div>
+  </div>
+
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getDatabase, ref, set, push, remove, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
@@ -190,14 +255,18 @@
     const fileStatusEl = document.getElementById("fileStatus");
     const fileNameInput = document.getElementById("fileNameInput");
     const filesList = document.getElementById("filesList");
-    const cameraInput = document.getElementById("cameraInput");
+    const galleryInput = document.getElementById("galleryInput");
     const previewBox = document.getElementById("previewBox");
     const previewImg = document.getElementById("previewImg");
     const previewTimer = document.getElementById("previewTimer");
 
+    const cameraModal = document.getElementById("cameraModal");
+    const cameraVideo = document.getElementById("cameraVideo");
+
     let savedFiles = {};
     let currentLectures = "";
     let loadingTimer = null;
+    let cameraStream = null;
 
     function showStatus(el, msg, color = "#38bdf8", time = 2500) {
       el.style.color = color;
@@ -295,10 +364,66 @@
       mainView.classList.remove("hidden");
     });
 
-    // --- Camera & Gemini Vision ---
-    document.getElementById("cameraBtn").addEventListener("click", () => {
-      cameraInput.value = "";
-      cameraInput.click();
+    // --- Custom Camera Modal (with Gallery button inside) ---
+    function closeCamera() {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((t) => t.stop());
+        cameraStream = null;
+      }
+      cameraVideo.srcObject = null;
+      cameraModal.classList.add("hidden");
+    }
+
+    document.getElementById("cameraBtn").addEventListener("click", async () => {
+      try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false
+        });
+        cameraVideo.srcObject = cameraStream;
+        cameraModal.classList.remove("hidden");
+      } catch {
+        // Fallback to gallery/file picker if camera permission denied or no camera
+        galleryInput.value = "";
+        galleryInput.click();
+      }
+    });
+
+    document.getElementById("closeCamBtn").addEventListener("click", closeCamera);
+
+    document.getElementById("galleryCamBtn").addEventListener("click", () => {
+      galleryInput.value = "";
+      galleryInput.click();
+    });
+
+    document.getElementById("shutterBtn").addEventListener("click", () => {
+      if (!cameraVideo.videoWidth) return;
+      const canvas = document.createElement("canvas");
+      const maxWidth = 850;
+      let width = cameraVideo.videoWidth;
+      let height = cameraVideo.videoHeight;
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext("2d").drawImage(cameraVideo, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+      closeCamera();
+      solveFromImage(dataUrl, dataUrl.split(",")[1]);
+    });
+
+    galleryInput.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      closeCamera();
+      try {
+        const { dataUrl, base64 } = await compressImage(file);
+        solveFromImage(dataUrl, base64);
+      } catch (err) {
+        showStatus(statusEl, "Error: " + err.message, "#f87171", 4000);
+      }
     });
 
     function compressImage(file, maxWidth = 850) {
@@ -317,7 +442,7 @@
             canvas.width = width;
             canvas.height = height;
             canvas.getContext("2d").drawImage(img, 0, 0, width, height);
-            const dataUrl = canvas.toDataURL("image/jpeg", 0.68);
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
             resolve({ dataUrl, base64: dataUrl.split(",")[1] });
           };
           img.onerror = reject;
@@ -386,14 +511,10 @@
       }
     }
 
-    cameraInput.addEventListener("change", async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
+    async function solveFromImage(dataUrl, base64) {
+      startPreviewLoading(dataUrl);
 
       try {
-        const { dataUrl, base64 } = await compressImage(file);
-        startPreviewLoading(dataUrl);
-
         const prompt = `Solve the coding question in this image quickly.
 ${currentLectures ? `Use the teacher's exact style/notes:\n${currentLectures}\n` : ""}
 Rules:
@@ -421,7 +542,7 @@ Return valid JSON only: {"group": "GA", "code": "..."}`;
         stopPreviewLoading();
         showStatus(statusEl, "Error: " + err.message, "#f87171", 4000);
       }
-    });
+    }
 
     // --- Saved Files (Manual Paste & Save) ---
     document.getElementById("pasteSaveBtn").addEventListener("click", async () => {
