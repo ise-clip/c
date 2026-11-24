@@ -24,12 +24,9 @@
       border: none; border-radius: 14px; padding: 16px;
       font-size: 1.1rem; font-weight: bold; color: #fff;
       cursor: pointer; touch-action: manipulation;
-      transition: transform 0.1s, opacity 0.2s;
+      transition: transform 0.1s;
     }
     button:active { transform: scale(0.97); }
-    button:disabled {
-      opacity: 0.35; cursor: not-allowed; transform: none;
-    }
     #openSaveBtn { background: #6366f1; }
     #copyBtn { background: #10b981; }
     #deleteBtn { background: #dc2626; padding: 14px; font-size: 1rem; }
@@ -134,7 +131,7 @@
     const clipRef = ref(db, "currentClip");
     const filesRef = ref(db, "savedCodes");
 
-    // Unique ID per device/browser
+    // Unique ID per device/browser for Save ownership
     let myUserId = localStorage.getItem("clip_user_id");
     if (!myUserId) {
       myUserId = "u_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -148,10 +145,8 @@
     const fileStatusEl = document.getElementById("fileStatus");
     const fileNameInput = document.getElementById("fileNameInput");
     const filesList = document.getElementById("filesList");
-    const deleteBtn = document.getElementById("deleteBtn");
 
     let savedFiles = {};
-    let currentClipOwner = null;
 
     function showStatus(el, msg, color = "#38bdf8", time = 2000) {
       el.style.color = color;
@@ -165,35 +160,11 @@
       return String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
 
-    function updateMainPermissions(text, ownerId) {
-      const hasText = Boolean(text && text.length > 0);
-      const isMine = !ownerId || ownerId === myUserId;
-
-      if (hasText && !isMine) {
-        deleteBtn.disabled = true;
-        codeBox.readOnly = true;
-      } else {
-        deleteBtn.disabled = !hasText;
-        codeBox.readOnly = false;
-      }
-    }
-
-    // --- Main Clipboard ---
+    // --- Main Clipboard (Open for everyone) ---
     onValue(clipRef, (snapshot) => {
       const raw = snapshot.val();
-      let text = "";
-      let ownerId = null;
-
-      if (typeof raw === "string") {
-        text = raw;
-      } else if (raw && typeof raw === "object") {
-        text = raw.text || "";
-        ownerId = raw.ownerId || null;
-      }
-
-      currentClipOwner = ownerId;
-      if (codeBox.value !== text) codeBox.value = text;
-      updateMainPermissions(text, ownerId);
+      const val = typeof raw === "string" ? raw : (raw?.text || "");
+      if (codeBox.value !== val) codeBox.value = val;
     });
 
     document.getElementById("pasteBtn").addEventListener("click", async () => {
@@ -201,7 +172,7 @@
         const text = await navigator.clipboard.readText();
         if (!text) return showStatus(statusEl, "Null !", "#f87171");
         codeBox.value = text;
-        await set(clipRef, { text, ownerId: myUserId });
+        await set(clipRef, text);
         showStatus(statusEl, "✓ Paste", "#38bdf8");
       } catch {
         showStatus(statusEl, "Paste manually (Ctrl+V)", "#fbbf24");
@@ -209,11 +180,7 @@
       }
     });
 
-    codeBox.addEventListener("input", () => {
-      if (codeBox.readOnly) return;
-      const text = codeBox.value;
-      set(clipRef, text ? { text, ownerId: myUserId } : { text: "", ownerId: null });
-    });
+    codeBox.addEventListener("input", () => set(clipRef, codeBox.value));
 
     document.getElementById("copyBtn").addEventListener("click", async () => {
       if (!codeBox.value) return showStatus(statusEl, "Null !", "#f87171");
@@ -227,13 +194,10 @@
       }
     });
 
-    deleteBtn.addEventListener("click", async () => {
+    document.getElementById("deleteBtn").addEventListener("click", async () => {
       if (!codeBox.value) return;
-      if (currentClipOwner && currentClipOwner !== myUserId) {
-        return showStatus(statusEl, "Only owner can delete!", "#f87171");
-      }
       codeBox.value = "";
-      await set(clipRef, { text: "", ownerId: null });
+      await set(clipRef, "");
       showStatus(statusEl, "✓ Delete", "#f87171");
     });
 
@@ -248,7 +212,7 @@
       mainView.classList.remove("hidden");
     });
 
-    // --- Saved Files (Paste & Save) ---
+    // --- Saved Files (Everyone can add & copy, ONLY owner can delete) ---
     function getNextAutoName() {
       let maxNum = 0;
       Object.values(savedFiles).forEach((item) => {
