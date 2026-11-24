@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+    <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -35,20 +35,43 @@
     #backBtn { background: #334155; width: 100%; padding: 14px; font-size: 1rem; }
     #pasteSaveBtn { background: #0284c7; width: 100%; padding: 14px; font-size: 1rem; }
 
-    .status {
-      display: flex; align-items: center; justify-content: center; gap: 8px;
-      font-size: 0.95rem; font-weight: bold; min-height: 24px; color: #38bdf8;
+    .preview-box {
+      position: relative;
+      width: 76px; height: 76px;
+      margin: 0 auto;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 2px solid #f59e0b;
+      background: #1e293b;
+      flex-shrink: 0;
+    }
+    .preview-box img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      opacity: 0.45;
+    }
+    .preview-overlay {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 4px;
+      background: rgba(11, 17, 32, 0.5);
+      color: #fbbf24; font-size: 0.8rem; font-weight: bold;
     }
     .spinner {
-      width: 16px; height: 16px;
-      border: 2.5px solid #334155;
+      width: 24px; height: 24px;
+      border: 3px solid rgba(255, 255, 255, 0.25);
       border-top-color: #fbbf24;
       border-radius: 50%;
       animation: spin 0.7s linear infinite;
-      display: inline-block;
     }
     @keyframes spin {
       to { transform: rotate(360deg); }
+    }
+
+    .status {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      font-size: 0.95rem; font-weight: bold; min-height: 22px; color: #38bdf8;
+      text-align: center;
     }
 
     #codeBox {
@@ -106,6 +129,15 @@
     <button id="cameraBtn">📷 Camera</button>
     <input type="file" id="cameraInput" accept="image/*" capture="environment" class="hidden">
 
+    <!-- Small Image Preview with Spinner Overlay -->
+    <div id="previewBox" class="preview-box hidden">
+      <img id="previewImg" alt="preview">
+      <div class="preview-overlay">
+        <span class="spinner"></span>
+        <span id="previewTimer">0s</span>
+      </div>
+    </div>
+
     <div class="status" id="status"></div>
 
     <textarea id="codeBox" dir="auto" placeholder="Codes....."></textarea>
@@ -159,12 +191,15 @@
     const fileNameInput = document.getElementById("fileNameInput");
     const filesList = document.getElementById("filesList");
     const cameraInput = document.getElementById("cameraInput");
+    const previewBox = document.getElementById("previewBox");
+    const previewImg = document.getElementById("previewImg");
+    const previewTimer = document.getElementById("previewTimer");
 
     let savedFiles = {};
     let currentLectures = "";
     let loadingTimer = null;
 
-    function showStatus(el, msg, color = "#38bdf8", time = 2200) {
+    function showStatus(el, msg, color = "#38bdf8", time = 2500) {
       el.style.color = color;
       el.textContent = msg;
       if (time > 0) {
@@ -172,28 +207,25 @@
       }
     }
 
-    function startLoading() {
-      stopLoading();
+    function startPreviewLoading(dataUrl) {
+      stopPreviewLoading();
+      previewImg.src = dataUrl;
+      previewBox.classList.remove("hidden");
+      statusEl.textContent = "";
       let seconds = 0;
-      let dots = 1;
-      const updateUI = () => {
-        const dotStr = ".".repeat(dots);
-        statusEl.style.color = "#fbbf24";
-        statusEl.innerHTML = `<span class="spinner"></span><span>Loading${dotStr} (${seconds}s)</span>`;
-        dots = (dots % 3) + 1;
-      };
-      updateUI();
+      previewTimer.textContent = "0s";
       loadingTimer = setInterval(() => {
         seconds++;
-        updateUI();
+        previewTimer.textContent = seconds + "s";
       }, 1000);
     }
 
-    function stopLoading() {
+    function stopPreviewLoading() {
       if (loadingTimer) {
         clearInterval(loadingTimer);
         loadingTimer = null;
       }
+      previewBox.classList.add("hidden");
     }
 
     function escapeHtml(str) {
@@ -224,7 +256,7 @@
         if (!text) return showStatus(statusEl, "Null !", "#f87171");
         codeBox.value = text;
         await set(clipRef, text);
-        showStatus(statusEl, "✓ Paste", "#34d399");
+        showStatus(statusEl, "✓ Paste", "#10b981");
       } catch {
         showStatus(statusEl, "Paste manually (Ctrl+V)", "#fbbf24");
         codeBox.focus();
@@ -237,11 +269,11 @@
       if (!codeBox.value) return showStatus(statusEl, "Null !", "#f87171");
       try {
         await navigator.clipboard.writeText(codeBox.value);
-        showStatus(statusEl, "✓ Copy", "#34d399");
+        showStatus(statusEl, "✓ Copy", "#10b981");
       } catch {
         codeBox.select();
         document.execCommand("copy");
-        showStatus(statusEl, "✓ Copy", "#34d399");
+        showStatus(statusEl, "✓ Copy", "#10b981");
       }
     });
 
@@ -269,7 +301,7 @@
       cameraInput.click();
     });
 
-    function compressImage(file, maxWidth = 1280) {
+    function compressImage(file, maxWidth = 850) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -285,7 +317,8 @@
             canvas.width = width;
             canvas.height = height;
             canvas.getContext("2d").drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL("image/jpeg", 0.8).split(",")[1]);
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.68);
+            resolve({ dataUrl, base64: dataUrl.split(",")[1] });
           };
           img.onerror = reject;
           img.src = e.target.result;
@@ -307,46 +340,69 @@
       return "code" + (maxNum + 1);
     }
 
+    async function callGeminiFast(prompt, base64Image, maxRetries = 2) {
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 25000);
+
+        try {
+          const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              signal: controller.signal,
+              body: JSON.stringify({
+                contents: [{
+                  parts: [
+                    { text: prompt },
+                    { inline_data: { mime_type: "image/jpeg", data: base64Image } }
+                  ]
+                }],
+                generationConfig: { responseMimeType: "application/json" }
+              })
+            }
+          );
+          clearTimeout(timeoutId);
+          const data = await res.json();
+
+          if (data.error) {
+            const msg = data.error.message || "API Error";
+            if ((res.status === 503 || res.status === 429 || msg.toLowerCase().includes("high demand")) && attempt < maxRetries) {
+              await new Promise(r => setTimeout(r, 1200));
+              continue;
+            }
+            throw new Error(msg);
+          }
+          return data;
+        } catch (err) {
+          clearTimeout(timeoutId);
+          if (attempt < maxRetries && (err.name === "AbortError" || err.message.toLowerCase().includes("high demand"))) {
+            await new Promise(r => setTimeout(r, 1000));
+            continue;
+          }
+          throw err.name === "AbortError" ? new Error("Timeout. Try again.") : err;
+        }
+      }
+    }
+
     cameraInput.addEventListener("change", async (e) => {
       const file = e.target.files[0];
       if (!file) return;
 
-      startLoading();
-
       try {
-        const base64Image = await compressImage(file);
-        const prompt = `You are solving an exam/lab question shown in this image.
-${currentLectures ? `Strictly follow the teacher's lecture notes, syntax, and coding style below:\n${currentLectures}\n` : ""}
-Tasks:
-1. Check if the image mentions an exam group (e.g., "Group A", "Group B", "Group C", "G-A", "G-B", etc.).
-   - If Group A -> set "group" to "GA"
-   - If Group B -> set "group" to "GB"
-   - If Group C -> set "group" to "GC" (and so on for any letter/number)
-   - If NO group is mentioned -> set "group" to ""
-2. Write ONLY the final clean working code in the "code" field (no markdown backticks, no extra explanations).
+        const { dataUrl, base64 } = await compressImage(file);
+        startPreviewLoading(dataUrl);
 
-Return ONLY valid JSON in this exact format:
-{"group": "GA", "code": "..."}`;
+        const prompt = `Solve the coding question in this image quickly.
+${currentLectures ? `Use the teacher's exact style/notes:\n${currentLectures}\n` : ""}
+Rules:
+1. Detect exam group (e.g. Group A -> "GA", Group B -> "GB", Group C -> "GC"). If none, set "group" to "".
+2. Put ONLY pure working code in "code".
+3. STRICTLY NO comments (no //, /* */, #, %) and NO explanations or markdown.
+Return valid JSON only: {"group": "GA", "code": "..."}`;
 
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{
-                parts: [
-                  { text: prompt },
-                  { inline_data: { mime_type: "image/jpeg", data: base64Image } }
-                ]
-              }],
-              generationConfig: { responseMimeType: "application/json" }
-            })
-          }
-        );
-
-        const data = await res.json();
-        if (data.error) throw new Error(data.error.message);
+        const data = await callGeminiFast(prompt, base64, 2);
 
         const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
         const parsed = JSON.parse(rawText);
@@ -359,10 +415,10 @@ Return ONLY valid JSON in this exact format:
         await set(clipRef, finalCode);
         await push(filesRef, { name: saveName, code: finalCode, createdAt: Date.now() });
 
-        stopLoading();
+        stopPreviewLoading();
         showStatus(statusEl, `✓ Paste (${saveName})`, "#10b981", 3500);
       } catch (err) {
-        stopLoading();
+        stopPreviewLoading();
         showStatus(statusEl, "Error: " + err.message, "#f87171", 4000);
       }
     });
@@ -377,7 +433,7 @@ Return ONLY valid JSON in this exact format:
         await push(filesRef, { name, code, createdAt: Date.now() });
 
         fileNameInput.value = "";
-        showStatus(fileStatusEl, `✓ Saved (${name})`, "#34d399");
+        showStatus(fileStatusEl, `✓ Saved (${name})`, "#10b981");
       } catch {
         showStatus(fileStatusEl, "Allow clipboard permission!", "#fbbf24");
       }
@@ -410,7 +466,7 @@ Return ONLY valid JSON in this exact format:
         card.querySelector(".btn-mini-copy").addEventListener("click", async () => {
           try {
             await navigator.clipboard.writeText(item.code || "");
-            showStatus(fileStatusEl, `✓ Copy (${item.name})`, "#34d399");
+            showStatus(fileStatusEl, `✓ Copy (${item.name})`, "#10b981");
           } catch {
             showStatus(fileStatusEl, "Copy failed", "#f87171");
           }
